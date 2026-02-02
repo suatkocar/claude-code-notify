@@ -31,9 +31,8 @@ curl -fsSL https://raw.githubusercontent.com/suatkocar/claude-code-notify/main/i
 
 This will:
 1. Download and compile the notification app
-2. Copy the Claude icon (if Claude Desktop is installed)
-3. Configure hooks in `~/.claude/settings.json` automatically
-4. Request notification permission
+2. Configure hooks in `~/.claude/settings.json` automatically
+3. Request notification permission
 
 **Manual install**:
 
@@ -121,10 +120,6 @@ Available sounds: `Basso`, `Blow`, `Bottle`, `Frog`, `Funk`, `Glass`, `Hero`, `M
 1. Check System Settings > Notifications > Claude Code
 2. Make sure "Allow Notifications" is enabled
 3. Set alert style to "Banners" or "Alerts"
-
-### No icon showing?
-
-Install [Claude Desktop](https://claude.ai/download) - the installer copies its icon.
 
 ### Permission denied?
 
