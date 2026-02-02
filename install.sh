@@ -68,8 +68,11 @@ cat > "$CLAUDE_DIR/ClaudeNotify.app/Contents/Info.plist" << 'EOF'
 </plist>
 EOF
 
-# Copy icon from Claude Desktop if available
-if [[ -f "/Applications/Claude.app/Contents/Resources/electron.icns" ]]; then
+# Copy icon (bundled in repo, fallback to Claude Desktop)
+if [[ -f "$TEMP_DIR/assets/AppIcon.icns" ]]; then
+    cp "$TEMP_DIR/assets/AppIcon.icns" \
+       "$CLAUDE_DIR/ClaudeNotify.app/Contents/Resources/AppIcon.icns"
+elif [[ -f "/Applications/Claude.app/Contents/Resources/electron.icns" ]]; then
     cp "/Applications/Claude.app/Contents/Resources/electron.icns" \
        "$CLAUDE_DIR/ClaudeNotify.app/Contents/Resources/AppIcon.icns"
 fi
@@ -92,6 +95,11 @@ fi
 
 # Check if jq is available
 if command -v jq &>/dev/null; then
+    # Check for existing hooks
+    if jq -e '.hooks.Stop or .hooks.Notification' "$SETTINGS_FILE" &>/dev/null; then
+        echo "    Warning: Existing hooks found. Merging..."
+    fi
+
     # Use jq to merge hooks
     HOOKS='{
       "hooks": {
