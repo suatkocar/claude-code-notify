@@ -13,6 +13,7 @@ Get notified when Claude completes a task or needs your input - with support for
 - Smart notification suppression when terminal is focused
 - Customizable sounds
 - Works with multiple terminals (Warp, iTerm2, Terminal.app, VS Code, etc.)
+- One-line installation with automatic configuration
 
 ## Requirements
 
@@ -22,10 +23,23 @@ Get notified when Claude completes a task or needs your input - with support for
 
 ## Installation
 
+**One-line install** (recommended):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/suatkocar/claude-code-notify/main/install.sh | bash
+```
+
+This will:
+1. Download and compile the notification app
+2. Copy the Claude icon (if Claude Desktop is installed)
+3. Configure hooks in `~/.claude/settings.json` automatically
+4. Request notification permission
+
+**Manual install**:
+
 ```bash
 git clone https://github.com/suatkocar/claude-code-notify.git
 cd claude-code-notify
-chmod +x install.sh
 ./install.sh
 ```
 

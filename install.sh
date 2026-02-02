@@ -1,24 +1,43 @@
 #!/bin/bash
-# Claude Code Notify - Installation Script
-# macOS native notifications for Claude Code
+# Claude Code Notify - One-line installer
+# Usage: curl -fsSL https://raw.githubusercontent.com/suatkocar/claude-code-notify/main/install.sh | bash
 
 set -e
 
-echo "Installing Claude Code Notify..."
+REPO_URL="https://github.com/suatkocar/claude-code-notify"
+TEMP_DIR=$(mktemp -d)
+CLAUDE_DIR="$HOME/.claude"
+
+echo "╔═══════════════════════════════════════════╗"
+echo "║   Claude Code Notify - Installer          ║"
+echo "╚═══════════════════════════════════════════╝"
+echo ""
+
+# Check for Xcode Command Line Tools
+if ! xcode-select -p &>/dev/null; then
+    echo "Error: Xcode Command Line Tools required"
+    echo "Run: xcode-select --install"
+    exit 1
+fi
+
+# Clone repo to temp directory
+echo "[1/5] Downloading..."
+git clone --quiet --depth 1 "$REPO_URL" "$TEMP_DIR"
 
 # Create directories
-mkdir -p ~/.claude/ClaudeNotify.app/Contents/MacOS
-mkdir -p ~/.claude/ClaudeNotify.app/Contents/Resources
+echo "[2/5] Creating app bundle..."
+mkdir -p "$CLAUDE_DIR/ClaudeNotify.app/Contents/MacOS"
+mkdir -p "$CLAUDE_DIR/ClaudeNotify.app/Contents/Resources"
 
 # Compile Swift app
-echo "Compiling notification app..."
-swiftc -o ~/.claude/ClaudeNotify.app/Contents/MacOS/ClaudeNotify \
-    "$(dirname "$0")/src/ClaudeNotify.swift" \
+echo "[3/5] Compiling..."
+swiftc -o "$CLAUDE_DIR/ClaudeNotify.app/Contents/MacOS/ClaudeNotify" \
+    "$TEMP_DIR/src/ClaudeNotify.swift" \
     -framework UserNotifications \
     -framework AppKit
 
 # Create Info.plist
-cat > ~/.claude/ClaudeNotify.app/Contents/Info.plist << 'EOF'
+cat > "$CLAUDE_DIR/ClaudeNotify.app/Contents/Info.plist" << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -51,53 +70,82 @@ EOF
 
 # Copy icon from Claude Desktop if available
 if [[ -f "/Applications/Claude.app/Contents/Resources/electron.icns" ]]; then
-    echo "Copying Claude icon..."
     cp "/Applications/Claude.app/Contents/Resources/electron.icns" \
-       ~/.claude/ClaudeNotify.app/Contents/Resources/AppIcon.icns
+       "$CLAUDE_DIR/ClaudeNotify.app/Contents/Resources/AppIcon.icns"
 fi
 
 # Sign the app
-echo "Signing app..."
-codesign --force --deep --sign - ~/.claude/ClaudeNotify.app
+codesign --force --deep --sign - "$CLAUDE_DIR/ClaudeNotify.app" 2>/dev/null
 
 # Copy notify script
-cp "$(dirname "$0")/scripts/notify.sh" ~/.claude/notify.sh
-chmod +x ~/.claude/notify.sh
+cp "$TEMP_DIR/scripts/notify.sh" "$CLAUDE_DIR/notify.sh"
+chmod +x "$CLAUDE_DIR/notify.sh"
 
-# Run once to request notification permission
-echo "Requesting notification permission..."
-open -g -a ~/.claude/ClaudeNotify.app --args -t "Claude Code" -m "Notifications enabled!" -s "Glass"
+# Configure hooks in settings.json
+echo "[4/5] Configuring hooks..."
+SETTINGS_FILE="$CLAUDE_DIR/settings.json"
 
-echo ""
-echo "Installation complete!"
-echo ""
-echo "Add the following hooks to your ~/.claude/settings.json:"
-echo ""
-cat << 'HOOKS'
-{
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
+# Create settings.json if it doesn't exist
+if [[ ! -f "$SETTINGS_FILE" ]]; then
+    echo '{}' > "$SETTINGS_FILE"
+fi
+
+# Check if jq is available
+if command -v jq &>/dev/null; then
+    # Use jq to merge hooks
+    HOOKS='{
+      "hooks": {
+        "Stop": [
           {
-            "type": "command",
-            "command": "~/.claude/notify.sh 'Claude Code' 'Task completed' 'Glass' \"$TERM_PROGRAM\""
+            "matcher": "",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "~/.claude/notify.sh '\''Claude Code'\'' '\''Task completed'\'' '\''Glass'\'' \"$TERM_PROGRAM\""
+              }
+            ]
+          }
+        ],
+        "Notification": [
+          {
+            "matcher": "permission_prompt",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "~/.claude/notify.sh '\''Claude Code'\'' '\''Waiting for your input'\'' '\''Glass'\'' \"$TERM_PROGRAM\""
+              }
+            ]
           }
         ]
       }
-    ],
-    "Notification": [
-      {
-        "matcher": "permission_prompt",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/notify.sh 'Claude Code' 'Waiting for your input' 'Glass' \"$TERM_PROGRAM\""
-          }
-        ]
-      }
-    ]
-  }
-}
-HOOKS
+    }'
+
+    # Merge with existing settings
+    jq -s '.[0] * .[1]' "$SETTINGS_FILE" <(echo "$HOOKS") > "$SETTINGS_FILE.tmp"
+    mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+    echo "    Hooks added to settings.json"
+else
+    # No jq - show manual instructions
+    echo ""
+    echo "    Note: jq not found. Please add hooks manually to $SETTINGS_FILE"
+    echo "    See: $REPO_URL#configuration"
+fi
+
+# Cleanup
+rm -rf "$TEMP_DIR"
+
+# Request notification permission
+echo "[5/5] Requesting notification permission..."
+open -g -a "$CLAUDE_DIR/ClaudeNotify.app" --args -t "Claude Code" -m "Notifications enabled!" -s "Glass"
+
+echo ""
+echo "╔═══════════════════════════════════════════╗"
+echo "║   Installation complete!                  ║"
+echo "╚═══════════════════════════════════════════╝"
+echo ""
+echo "You'll get notifications when:"
+echo "  • Claude completes a task"
+echo "  • Claude needs permission for a command"
+echo ""
+echo "Tip: If using Warp, notifications show which tab they came from!"
+echo ""
