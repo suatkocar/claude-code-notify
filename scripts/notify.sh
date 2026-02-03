@@ -23,4 +23,4 @@ else
 fi
 
 # Send notification
-open -g -a ~/.claude/ClaudeNotify.app --args -t "$TITLE" -m "$FULL_MESSAGE" -s "$SOUND" --terminal "$TERMINAL"
+open -g -a ~/.claude/ClaudeNotify.app --args -t "$TITLE" -m "$FULL_MESSAGE" -s "$SOUND"

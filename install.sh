@@ -109,7 +109,7 @@ if command -v jq &>/dev/null; then
             "hooks": [
               {
                 "type": "command",
-                "command": "~/.claude/notify.sh '\''Claude Code'\'' '\''Task completed'\'' '\''Glass'\'' \"$TERM_PROGRAM\""
+                "command": "~/.claude/notify.sh '\''Claude Code'\'' '\''Task completed'\'' '\''Glass'\''"
               }
             ]
           }
@@ -120,7 +120,7 @@ if command -v jq &>/dev/null; then
             "hooks": [
               {
                 "type": "command",
-                "command": "~/.claude/notify.sh '\''Claude Code'\'' '\''Waiting for your input'\'' '\''Glass'\'' \"$TERM_PROGRAM\""
+                "command": "~/.claude/notify.sh '\''Claude Code'\'' '\''Waiting for your input'\'' '\''Glass'\''"
               }
             ]
           }
