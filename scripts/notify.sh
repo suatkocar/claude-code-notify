@@ -11,11 +11,13 @@ TERMINAL="${4:-}"
 TAB_NAME=""
 if [[ "$TERMINAL" == "WarpTerminal" ]] || [[ "$TERMINAL" == "Warp" ]]; then
     TAB_NAME=$(osascript -e 'tell application "System Events" to get name of first window of application process "Warp"' 2>/dev/null)
-    # Remove the sparkle prefix (✳ ) - skip first 2 characters
-    TAB_NAME="${TAB_NAME:2}"
+    # Remove the sparkle prefix (✳ ) if present
+    if [[ "$TAB_NAME" == "✳ "* ]]; then
+        TAB_NAME="${TAB_NAME:2}"
+    fi
 fi
 
-# Build message with tab name if available
+# Build message with tab name suffix if available
 if [[ -n "$TAB_NAME" ]]; then
     FULL_MESSAGE="$MESSAGE - $TAB_NAME"
 else

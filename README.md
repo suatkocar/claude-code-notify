@@ -4,7 +4,9 @@ Native macOS notifications for [Claude Code](https://github.com/anthropics/claud
 
 Get notified when Claude completes a task or needs your permission - instantly!
 
-![Notification Example](assets/notification.png)
+| Task Completed | Permission Required |
+|:-:|:-:|
+| ![Task Completed](assets/notification-task-completed.png) | ![Permission Required](assets/notification-permission.png) |
 
 ## Features
 

@@ -97,12 +97,15 @@ if is_allowed "$TOOL_NAME" "$TOOL_INPUT"; then
 fi
 
 # Not allowed - send notification
+# Pass terminal info for Warp tab name support
+TERMINAL="${TERM_PROGRAM:-}"
+
 if [[ "$TOOL_NAME" == "Bash" ]]; then
     SHORT_INPUT=$(echo "$TOOL_INPUT" | head -c 50)
-    ~/.claude/notify.sh 'Permission Required' "$SHORT_INPUT" 'Glass' &
+    ~/.claude/notify.sh 'Claude Code - Permission Required' "$SHORT_INPUT" 'Glass' "$TERMINAL" &
 elif [[ "$TOOL_NAME" == "Edit" ]] || [[ "$TOOL_NAME" == "Write" ]]; then
     FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // ""')
-    ~/.claude/notify.sh 'Permission Required' "$TOOL_NAME: $FILE_PATH" 'Glass' &
+    ~/.claude/notify.sh 'Claude Code - Permission Required' "$TOOL_NAME: $FILE_PATH" 'Glass' "$TERMINAL" &
 else
-    ~/.claude/notify.sh 'Permission Required' "$TOOL_NAME" 'Glass' &
+    ~/.claude/notify.sh 'Claude Code - Permission Required' "$TOOL_NAME" 'Glass' "$TERMINAL" &
 fi
