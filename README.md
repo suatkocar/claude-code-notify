@@ -2,18 +2,19 @@
 
 Native macOS notifications for [Claude Code](https://github.com/anthropics/claude-code) CLI.
 
-Get notified when Claude completes a task or needs your input - with support for Warp terminal tab names!
+Get notified when Claude completes a task or needs your permission - instantly!
 
 ![Notification Example](assets/notification.png)
 
 ## Features
 
-- Native macOS notifications (no dependencies)
-- Shows which Warp tab the notification came from
-- Smart notification suppression when terminal is focused
-- Customizable sounds
-- Works with multiple terminals (Warp, iTerm2, Terminal.app, VS Code, etc.)
-- One-line installation with automatic configuration
+- **Instant notifications** - No delay thanks to PreToolUse hook
+- **Smart permission detection** - Only notifies when permission is actually needed
+- **Native macOS notifications** - No dependencies
+- **Warp tab name support** - Shows which tab the notification came from
+- **Customizable sounds**
+- **Works with all terminals** (Warp, iTerm2, Terminal.app, VS Code, etc.)
+- **One-line installation** with automatic configuration
 
 ## Requirements
 
@@ -44,7 +45,7 @@ cd claude-code-notify
 
 ## Configuration
 
-Add the following to your `~/.claude/settings.json`:
+The installer automatically adds these hooks to `~/.claude/settings.json`:
 
 ```json
 {
@@ -55,18 +56,18 @@ Add the following to your `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/notify.sh 'Claude Code' 'Task completed' 'Glass' \"$TERM_PROGRAM\""
+            "command": "~/.claude/notify.sh 'Claude Code' 'Task completed' 'Glass'"
           }
         ]
       }
     ],
-    "Notification": [
+    "PreToolUse": [
       {
-        "matcher": "permission_prompt",
+        "matcher": "Bash|Write|Edit",
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/notify.sh 'Claude Code' 'Waiting for your input' 'Glass' \"$TERM_PROGRAM\""
+            "command": "~/.claude/notify-permission.sh"
           }
         ]
       }
@@ -77,19 +78,18 @@ Add the following to your `~/.claude/settings.json`:
 
 ## How It Works
 
-1. **Stop Hook**: Triggers when Claude finishes a response
-2. **Notification Hook**: Triggers when Claude needs permission to run a command
+1. **Stop Hook**: Notifies when Claude finishes a response
+2. **PreToolUse Hook**: Notifies when Claude needs permission to run a command
 
-The notification includes:
-- Title: "Claude Code"
-- Message: Task status + Warp tab name (if using Warp)
-- Sound: Customizable (default: Glass)
+### Smart Permission Detection
 
-### Smart Features
+The `notify-permission.sh` script reads your `permissions.allow` list from `settings.json` and only sends notifications when:
+- The tool actually requires permission (not in your allowed list)
+- Shows the command/file path in the notification
 
-- **Tab Name Detection**: When using Warp, shows which tab the notification came from
-- **Focus Detection**: Skips notification if you're already looking at the terminal
-- **No Background Process**: App only runs when sending a notification, then exits
+**Notification content:**
+- Bash commands: Shows the command (e.g., `Permission Required: npm install`)
+- Edit/Write: Shows the file path (e.g., `Permission Required: Edit: /path/to/file.js`)
 
 ## Customization
 
@@ -97,21 +97,7 @@ The notification includes:
 
 Available sounds: `Basso`, `Blow`, `Bottle`, `Frog`, `Funk`, `Glass`, `Hero`, `Morse`, `Ping`, `Pop`, `Purr`, `Sosumi`, `Submarine`, `Tink`
 
-```bash
-~/.claude/notify.sh 'Claude Code' 'Task completed' 'Ping' "$TERM_PROGRAM"
-```
-
-### Supported Terminals
-
-| Terminal | TERM_PROGRAM |
-|----------|--------------|
-| Warp | WarpTerminal |
-| Terminal.app | Apple_Terminal |
-| iTerm2 | iTerm.app |
-| VS Code | vscode |
-| Alacritty | alacritty |
-| Kitty | kitty |
-| Hyper | Hyper |
+Edit the hooks in `~/.claude/settings.json` to change the sound.
 
 ## Troubleshooting
 
@@ -125,6 +111,7 @@ Available sounds: `Basso`, `Blow`, `Bottle`, `Frog`, `Funk`, `Glass`, `Hero`, `M
 
 ```bash
 chmod +x ~/.claude/notify.sh
+chmod +x ~/.claude/notify-permission.sh
 codesign --force --deep --sign - ~/.claude/ClaudeNotify.app
 ```
 
@@ -133,9 +120,10 @@ codesign --force --deep --sign - ~/.claude/ClaudeNotify.app
 ```bash
 rm -rf ~/.claude/ClaudeNotify.app
 rm ~/.claude/notify.sh
+rm ~/.claude/notify-permission.sh
 ```
 
-Remove the hooks from `~/.claude/settings.json`.
+Remove the `Stop` and `PreToolUse` hooks from `~/.claude/settings.json`.
 
 ## License
 
