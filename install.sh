@@ -111,7 +111,7 @@ if command -v jq &>/dev/null; then
             "hooks": [
               {
                 "type": "command",
-                "command": "~/.claude/notify.sh '\''Claude Code'\'' '\''Task completed'\'' '\''Glass'\''"
+                "command": "~/.claude/notify.sh '\''Claude Code'\'' '\''Task completed'\'' '\''Glass'\'' \"$TERM_PROGRAM\""
               }
             ]
           }

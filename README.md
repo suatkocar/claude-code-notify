@@ -13,7 +13,7 @@ Get notified when Claude completes a task or needs your permission - instantly!
 - **Instant notifications** - No delay thanks to PreToolUse hook
 - **Smart permission detection** - Only notifies when permission is actually needed
 - **Native macOS notifications** - No dependencies
-- **Warp tab name support** - Shows which tab the notification came from
+- **Warp tab name support** - Shows which tab the notification came from (e.g., `Task completed - API Refactor`)
 - **Customizable sounds**
 - **Works with all terminals** (Warp, iTerm2, Terminal.app, VS Code, etc.)
 - **One-line installation** with automatic configuration
@@ -58,7 +58,7 @@ The installer automatically adds these hooks to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/notify.sh 'Claude Code' 'Task completed' 'Glass'"
+            "command": "~/.claude/notify.sh 'Claude Code' 'Task completed' 'Glass' \"$TERM_PROGRAM\""
           }
         ]
       }
@@ -89,9 +89,10 @@ The `notify-permission.sh` script reads your `permissions.allow` list from `sett
 - The tool actually requires permission (not in your allowed list)
 - Shows the command/file path in the notification
 
-**Notification content:**
-- Bash commands: Shows the command (e.g., `Permission Required: npm install`)
-- Edit/Write: Shows the file path (e.g., `Permission Required: Edit: /path/to/file.js`)
+**Notification format:**
+- **Title:** `Claude Code - Permission Required`
+- **Body:** `command - Tab Name` (e.g., `npm install - API Refactor`)
+- For Edit/Write: Shows the file path (e.g., `Edit: /path/to/file.js - My Project`)
 
 ## Customization
 
