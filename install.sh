@@ -80,9 +80,11 @@ fi
 # Sign the app
 codesign --force --deep --sign - "$CLAUDE_DIR/ClaudeNotify.app" 2>/dev/null
 
-# Copy notify script
+# Copy scripts
 cp "$TEMP_DIR/scripts/notify.sh" "$CLAUDE_DIR/notify.sh"
+cp "$TEMP_DIR/scripts/notify-permission.sh" "$CLAUDE_DIR/notify-permission.sh"
 chmod +x "$CLAUDE_DIR/notify.sh"
+chmod +x "$CLAUDE_DIR/notify-permission.sh"
 
 # Configure hooks in settings.json
 echo "[4/5] Configuring hooks..."
@@ -96,7 +98,7 @@ fi
 # Check if jq is available
 if command -v jq &>/dev/null; then
     # Check for existing hooks
-    if jq -e '.hooks.Stop or .hooks.Notification' "$SETTINGS_FILE" &>/dev/null; then
+    if jq -e '.hooks.Stop or .hooks.PreToolUse' "$SETTINGS_FILE" &>/dev/null; then
         echo "    Warning: Existing hooks found. Merging..."
     fi
 
@@ -114,13 +116,13 @@ if command -v jq &>/dev/null; then
             ]
           }
         ],
-        "Notification": [
+        "PreToolUse": [
           {
-            "matcher": "permission_prompt",
+            "matcher": "Bash|Write|Edit",
             "hooks": [
               {
                 "type": "command",
-                "command": "~/.claude/notify.sh '\''Claude Code'\'' '\''Waiting for your input'\'' '\''Glass'\''"
+                "command": "~/.claude/notify-permission.sh"
               }
             ]
           }
