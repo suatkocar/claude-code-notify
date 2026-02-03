@@ -13,13 +13,20 @@ ALLOWED_LIST=$(jq -r '.permissions.allow[]' "$SETTINGS_FILE" 2>/dev/null)
 DENIED_LIST=$(jq -r '.permissions.deny[]' "$SETTINGS_FILE" 2>/dev/null)
 
 # Convert Claude Code pattern to regex
-# * matches anything including spaces
+# Rule: If pattern contains space, * matches anything
+#       If pattern has no space, * matches non-space only
 pattern_to_regex() {
     local pattern="$1"
     # Escape special regex chars except *
     local escaped=$(echo "$pattern" | sed 's/[.^$+?{}|()\\[\\]]/\\&/g')
-    # Convert * to .*
-    local regex=$(echo "$escaped" | sed 's/\*/.*/g')
+
+    if [[ "$pattern" == *" "* ]]; then
+        # Pattern has space - * matches anything
+        local regex=$(echo "$escaped" | sed 's/\*/.*/g')
+    else
+        # Pattern has no space - * matches non-space only
+        local regex=$(echo "$escaped" | sed 's/\*/[^ ]*/g')
+    fi
     echo "^${regex}$"
 }
 
