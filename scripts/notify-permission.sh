@@ -12,21 +12,25 @@ TOOL_INPUT=$(echo "$INPUT" | jq -r '.tool_input.command // .tool_input // ""')
 ALLOWED_LIST=$(jq -r '.permissions.allow[]' "$SETTINGS_FILE" 2>/dev/null)
 DENIED_LIST=$(jq -r '.permissions.deny[]' "$SETTINGS_FILE" 2>/dev/null)
 
+# Check if command has file write operators
+# These ALWAYS require permission because they write to files
+has_write_operators() {
+    local cmd="$1"
+    # Check for: > >> (file redirects)
+    if [[ "$cmd" =~ \>[^\>] ]] || [[ "$cmd" =~ \>\> ]]; then
+        return 0
+    fi
+    return 1
+}
+
 # Convert Claude Code pattern to regex
-# Rule: If pattern contains space, * matches anything
-#       If pattern has no space, * matches non-space only
+# Rule: * matches anything (including spaces)
 pattern_to_regex() {
     local pattern="$1"
     # Escape special regex chars except *
     local escaped=$(echo "$pattern" | sed 's/[.^$+?{}|()\\[\\]]/\\&/g')
-
-    if [[ "$pattern" == *" "* ]]; then
-        # Pattern has space - * matches anything
-        local regex=$(echo "$escaped" | sed 's/\*/.*/g')
-    else
-        # Pattern has no space - * matches non-space only
-        local regex=$(echo "$escaped" | sed 's/\*/[^ ]*/g')
-    fi
+    # * matches anything
+    local regex=$(echo "$escaped" | sed 's/\*/.*/g')
     echo "^${regex}$"
 }
 
@@ -57,6 +61,12 @@ is_allowed() {
 
     # First check if denied
     if is_denied "$tool" "$input"; then
+        return 1
+    fi
+
+    # For Bash commands, check file write operators FIRST
+    # These always require permission because they write to files
+    if [[ "$tool" == "Bash" ]] && has_write_operators "$input"; then
         return 1
     fi
 
