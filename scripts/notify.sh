@@ -11,10 +11,8 @@ TERMINAL="${4:-}"
 TAB_NAME=""
 if [[ "$TERMINAL" == "WarpTerminal" ]] || [[ "$TERMINAL" == "Warp" ]]; then
     TAB_NAME=$(osascript -e 'tell application "System Events" to get name of first window of application process "Warp"' 2>/dev/null)
-    # Remove the sparkle prefix (✳ ) if present
-    if [[ "$TAB_NAME" == "✳ "* ]]; then
-        TAB_NAME="${TAB_NAME:2}"
-    fi
+    # Remove common prefixes: ✳, -, •, etc. (Warp uses different indicators)
+    TAB_NAME=$(echo "$TAB_NAME" | sed -E 's/^[✳•\-] //')
 fi
 
 # Build message with tab name suffix if available
