@@ -16,8 +16,10 @@ DENIED_LIST=$(jq -r '.permissions.deny[]' "$SETTINGS_FILE" 2>/dev/null)
 # These ALWAYS require permission because they write to files
 has_write_operators() {
     local cmd="$1"
-    # Check for: > >> (file redirects)
-    if [[ "$cmd" =~ \>[^\>] ]] || [[ "$cmd" =~ \>\> ]]; then
+    # Remove safe redirects: 2>/dev/null, >/dev/null, 2>&1, >&2, etc.
+    local cleaned=$(echo "$cmd" | sed -E 's/[0-9]*>[>&][0-9]*//g; s/[0-9]*>\/dev\/null//g')
+    # Check for remaining: > >> (actual file redirects)
+    if [[ "$cleaned" =~ \>[^\>] ]] || [[ "$cleaned" =~ \>\> ]]; then
         return 0
     fi
     return 1
