@@ -7,6 +7,12 @@ SETTINGS_FILE="$HOME/.claude/settings.json"
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
 TOOL_INPUT=$(echo "$INPUT" | jq -r '.tool_input.command // .tool_input // ""')
+PERMISSION_MODE=$(echo "$INPUT" | jq -r '.permission_mode // "default"')
+
+# Skip notifications if running in dangerously-skip-permissions mode
+if [[ "$PERMISSION_MODE" != "default" ]]; then
+    exit 0
+fi
 
 # Get allowed and denied lists from settings.json
 ALLOWED_LIST=$(jq -r '.permissions.allow[]' "$SETTINGS_FILE" 2>/dev/null)
