@@ -9,10 +9,24 @@ TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
 TOOL_INPUT=$(echo "$INPUT" | jq -r '.tool_input.command // .tool_input // ""')
 PERMISSION_MODE=$(echo "$INPUT" | jq -r '.permission_mode // "default"')
 
-# Skip notifications if running in dangerously-skip-permissions mode
-if [[ "$PERMISSION_MODE" != "default" ]]; then
+# Notifications only matter in modes where the user is actually prompted.
+# - "default": user approves everything not in the allow list
+# - "acceptEdits": Edit/Write auto-approved, but Bash still prompts
+# Any other mode (bypassPermissions, dangerouslySkipPermissions, plan, etc.)
+# means no prompts → no point notifying.
+if [[ "$PERMISSION_MODE" != "default" ]] && [[ "$PERMISSION_MODE" != "acceptEdits" ]]; then
     exit 0
 fi
+
+# In acceptEdits mode, only Bash commands can trigger prompts
+if [[ "$PERMISSION_MODE" == "acceptEdits" ]] && [[ "$TOOL_NAME" != "Bash" ]]; then
+    exit 0
+fi
+
+# Commands that are inherently safe (read-only / navigation)
+# These never need permission regardless of arguments, UNLESS they have
+# file write operators (>, >>) which are caught earlier in the flow.
+SAFE_COMMANDS="cd pwd ls echo cat head tail find grep rg fd ag fzf wc file stat du df which whereis whoami type test uname date hostname printenv env basename dirname realpath readlink sort uniq cut tr jq yq diff tree md5 shasum sha256sum"
 
 # Get allowed and denied lists from settings.json
 ALLOWED_LIST=$(jq -r '.permissions.allow[]' "$SETTINGS_FILE" 2>/dev/null)
@@ -76,6 +90,17 @@ is_allowed() {
     # These always require permission because they write to files
     if [[ "$tool" == "Bash" ]] && has_write_operators "$input"; then
         return 1
+    fi
+
+    # Fast-path: inherently safe commands (cd, ls, find, etc.)
+    # Skip fast-path for compound commands (&&, ||, ;) — each part needs checking
+    if [[ "$tool" == "Bash" ]] && ! [[ "$input" =~ \&\&|\|\||[^\>]\; ]]; then
+        local first_word=$(echo "$input" | awk '{print $1}')
+        for safe in $SAFE_COMMANDS; do
+            if [[ "$first_word" == "$safe" ]]; then
+                return 0
+            fi
+        done
     fi
 
     while IFS= read -r pattern; do
