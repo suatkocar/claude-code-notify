@@ -97,43 +97,36 @@ fi
 
 # Check if jq is available
 if command -v jq &>/dev/null; then
-    # Check for existing hooks
-    if jq -e '.hooks.Stop or .hooks.PreToolUse' "$SETTINGS_FILE" &>/dev/null; then
-        echo "    Warning: Existing hooks found. Merging..."
-    fi
-
-    # Use jq to merge hooks
+    # notify.sh reads each hook's JSON from stdin, so the hooks take no arguments.
     HOOKS='{
-      "hooks": {
-        "Stop": [
-          {
-            "matcher": "",
-            "hooks": [
-              {
-                "type": "command",
-                "command": "~/.claude/notify.sh '\''Claude Code'\'' '\''Task completed'\'' '\''Glass'\'' \"$TERM_PROGRAM\""
-              }
-            ]
-          }
-        ],
-        "PreToolUse": [
-          {
-            "matcher": "Bash|Write|Edit",
-            "hooks": [
-              {
-                "type": "command",
-                "command": "~/.claude/notify-permission.sh"
-              }
-            ]
-          }
-        ]
-      }
+      "Stop": [
+        {"hooks": [{"type": "command", "command": "~/.claude/notify.sh"}]}
+      ],
+      "Notification": [
+        {"hooks": [{"type": "command", "command": "~/.claude/notify.sh"}]}
+      ],
+      "PreToolUse": [
+        {"matcher": "Bash|Write|Edit", "hooks": [{"type": "command", "command": "~/.claude/notify-permission.sh"}]}
+      ]
     }'
 
-    # Merge with existing settings
-    jq -s '.[0] * .[1]' "$SETTINGS_FILE" <(echo "$HOOKS") > "$SETTINGS_FILE.tmp"
+    # Add our hooks next to the ones already there; other tools' hooks are kept.
+    # Earlier copies of our own hooks (the old argument form too) are replaced,
+    # so running the installer again never adds duplicates.
+    cp "$SETTINGS_FILE" "$SETTINGS_FILE.claude-notify.bak"
+    jq --argjson add "$HOOKS" '
+      def ours: (.command // "") | test("/\\.claude/notify(-permission)?\\.sh");
+      .hooks = (.hooks // {})
+      | reduce ($add | to_entries[]) as $e (.;
+          .hooks[$e.key] = (
+            [ (.hooks[$e.key] // [])[]
+              | .hooks = ((.hooks // []) | map(select(ours | not)))
+              | select(.hooks | length > 0) ]
+            + $e.value))
+    ' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp"
     mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
-    echo "    Hooks added to settings.json"
+    echo "    Hooks added to settings.json (existing hooks kept)"
+    echo "    Backup: $SETTINGS_FILE.claude-notify.bak"
 else
     # No jq - show manual instructions
     echo ""
@@ -155,7 +148,11 @@ echo "╚═══════════════════════�
 echo ""
 echo "You'll get notifications when:"
 echo "  • Claude completes a task"
+echo "  • Claude is waiting for your input"
 echo "  • Claude needs permission for a command"
+echo ""
+echo "Inside Ghostex they stay quiet, since Ghostex sends its own."
+echo "Set CLAUDE_NOTIFY=off or CLAUDE_NOTIFY=on to override (see the README)."
 echo ""
 echo "Tip: If using Warp, notifications show which tab they came from!"
 echo ""

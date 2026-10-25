@@ -4,6 +4,24 @@
 #   1. Direct args: notify.sh "title" "message" "sound" "terminal"
 #   2. Stdin JSON: piped from Stop/Notification hooks (reads last_assistant_message etc.)
 
+# CLAUDE_NOTIFY=off silences notifications anywhere, CLAUDE_NOTIFY=on forces them.
+# Unset, they stay quiet inside Ghostex, whose own hook already shows a
+# notification and plays a sound for the same events. The check mirrors the one
+# in Ghostex's agent-shell-notify.sh, so this goes quiet exactly where Ghostex
+# takes over.
+stay_quiet() {
+    case "${CLAUDE_NOTIFY:-}" in
+        off) return 0 ;;
+        on) return 1 ;;
+    esac
+    [[ -n "${GHOSTEX_GLOBAL_SESSION_REF:-}" && -n "${GHOSTEX_GXSERVER_BASE_URL:-}" ]]
+}
+if stay_quiet; then
+    # Drain the hook's JSON; argument calls may have an open stdin that never ends.
+    [[ $# -eq 0 && ! -t 0 ]] && cat >/dev/null
+    exit 0
+fi
+
 # If stdin has data and no args, read from JSON
 if [[ $# -eq 0 ]] && ! [[ -t 0 ]]; then
     INPUT=$(cat)

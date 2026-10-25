@@ -3,6 +3,19 @@
 
 SETTINGS_FILE="$HOME/.claude/settings.json"
 
+# Same rule as in notify.sh (see there): when it would stay quiet, skip the work below.
+stay_quiet() {
+    case "${CLAUDE_NOTIFY:-}" in
+        off) return 0 ;;
+        on) return 1 ;;
+    esac
+    [[ -n "${GHOSTEX_GLOBAL_SESSION_REF:-}" && -n "${GHOSTEX_GXSERVER_BASE_URL:-}" ]]
+}
+if stay_quiet; then
+    [[ -t 0 ]] || cat >/dev/null
+    exit 0
+fi
+
 # Read JSON input from stdin
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')

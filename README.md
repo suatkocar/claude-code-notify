@@ -16,6 +16,8 @@ Get notified when Claude completes a task or needs your permission - instantly!
 - **Warp tab name support** - Shows which tab the notification came from (e.g., `Task completed - API Refactor`)
 - **Customizable sounds**
 - **Works with all terminals** (Warp, iTerm2, Terminal.app, VS Code, etc.)
+- **Stays quiet inside [Ghostex](https://github.com/maddada/Ghostex)** - Ghostex sends its own notifications, so you never get two
+- **On/off switch** - `CLAUDE_NOTIFY=off` or `on` for one session, a project, a terminal app or everywhere
 - **One-line installation** with automatic configuration
 
 ## Requirements
@@ -47,18 +49,27 @@ cd claude-code-notify
 
 ## Configuration
 
-The installer automatically adds these hooks to `~/.claude/settings.json`:
+The installer adds these hooks to `~/.claude/settings.json`, next to the hooks you already have (it keeps them, replaces only its own earlier entries, and saves a backup as `settings.json.claude-notify.bak` first):
 
 ```json
 {
   "hooks": {
     "Stop": [
       {
-        "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/notify.sh 'Claude Code' 'Task completed' 'Glass' \"$TERM_PROGRAM\""
+            "command": "~/.claude/notify.sh"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/notify.sh"
           }
         ]
       }
@@ -80,8 +91,9 @@ The installer automatically adds these hooks to `~/.claude/settings.json`:
 
 ## How It Works
 
-1. **Stop Hook**: Notifies when Claude finishes a response
-2. **PreToolUse Hook**: Notifies when Claude needs permission to run a command
+1. **Stop Hook**: Notifies when Claude finishes a response, with the start of its last message
+2. **Notification Hook**: Notifies when Claude is waiting for your input
+3. **PreToolUse Hook**: Notifies when Claude needs permission to run a command
 
 ### Smart Permission Detection
 
@@ -94,13 +106,31 @@ The `notify-permission.sh` script reads your `permissions.allow` list from `sett
 - **Body:** `command - Tab Name` (e.g., `npm install - API Refactor`)
 - For Edit/Write: Shows the file path (e.g., `Edit: /path/to/file.js - My Project`)
 
+## Inside Ghostex
+
+[Ghostex](https://github.com/maddada/Ghostex) shows its own notification and plays its own sound when a session finishes or needs you. Inside a Ghostex session these scripts stay quiet, so you get one notification instead of two. They check the same variables Ghostex's own hook checks (`GHOSTEX_GLOBAL_SESSION_REF` and `GHOSTEX_GXSERVER_BASE_URL`), so they go quiet exactly where Ghostex takes over. Every other terminal is unaffected.
+
+## Turning Notifications Off or On
+
+Set `CLAUDE_NOTIFY` to `off` to silence the notifications, or to `on` to force them (for example inside Ghostex). Left unset, the automatic behavior above applies.
+
+| To silence | Where | What to write |
+|---|---|---|
+| One Claude session | The terminal, when you start it | `CLAUDE_NOTIFY=off claude` |
+| A background job or script | The command that starts it | `CLAUDE_NOTIFY=off claude -p "..."` |
+| One terminal app (e.g. Warp) | `~/.zshrc` | `[[ $TERM_PROGRAM == WarpTerminal ]] && export CLAUDE_NOTIFY=off` |
+| One project | That project's `.claude/settings.local.json` | `{ "env": { "CLAUDE_NOTIFY": "off" } }` |
+| Everywhere | `~/.claude/settings.json` | `"env": { "CLAUDE_NOTIFY": "off" }` |
+
+To get Claude Code Notify's notifications inside Ghostex as well, start that session with `CLAUDE_NOTIFY=on claude`.
+
 ## Customization
 
 ### Change Notification Sound
 
 Available sounds: `Basso`, `Blow`, `Bottle`, `Frog`, `Funk`, `Glass`, `Hero`, `Morse`, `Ping`, `Pop`, `Purr`, `Sosumi`, `Submarine`, `Tink`
 
-Edit the hooks in `~/.claude/settings.json` to change the sound.
+Change `SOUND="Glass"` in `~/.claude/notify.sh` to use another sound.
 
 ## Troubleshooting
 
@@ -126,7 +156,7 @@ rm ~/.claude/notify.sh
 rm ~/.claude/notify-permission.sh
 ```
 
-Remove the `Stop` and `PreToolUse` hooks from `~/.claude/settings.json`.
+Remove the `Stop`, `Notification` and `PreToolUse` entries that run `notify.sh` or `notify-permission.sh` from `~/.claude/settings.json`.
 
 ## License
 
