@@ -7,6 +7,7 @@ SETTINGS_FILE="$HOME/.claude/settings.json"
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
 TOOL_INPUT=$(echo "$INPUT" | jq -r '.tool_input.command // .tool_input // ""')
+# permission_mode is optional since Claude Code ~2.1.50+, default to "default"
 PERMISSION_MODE=$(echo "$INPUT" | jq -r '.permission_mode // "default"')
 
 # Notifications only matter in modes where the user is actually prompted.
