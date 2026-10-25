@@ -2,6 +2,7 @@
 # Only notify if tool requires permission - reads allowed list from settings.json
 
 SETTINGS_FILE="$HOME/.claude/settings.json"
+[[ -f "$SETTINGS_FILE" ]] || SETTINGS_FILE=/dev/null
 
 # Same rule as in notify.sh (see there): when it would stay quiet, skip the work below.
 stay_quiet() {
@@ -16,143 +17,69 @@ if stay_quiet; then
     exit 0
 fi
 
-# Read JSON input from stdin
-INPUT=$(cat)
-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
-TOOL_INPUT=$(echo "$INPUT" | jq -r '.tool_input.command // .tool_input // ""')
-# permission_mode is optional since Claude Code ~2.1.50+, default to "default"
-PERMISSION_MODE=$(echo "$INPUT" | jq -r '.permission_mode // "default"')
+# One jq run reads the hook's JSON from stdin and the allow/deny rules from
+# settings.json, and prints "!" plus the notification text only when the call
+# would actually prompt. (Spawning sed for every rule took about a second.)
+OUTPUT=$(jq -r --slurpfile settings "$SETTINGS_FILE" '
+    # Commands that are inherently safe (read-only / navigation). They never
+    # need permission, unless they write to a file (checked first).
+    def safe_commands: ["cd", "pwd", "ls", "echo", "cat", "head", "tail", "find",
+        "grep", "rg", "fd", "ag", "fzf", "wc", "file", "stat", "du", "df", "which",
+        "whereis", "whoami", "type", "test", "uname", "date", "hostname", "printenv",
+        "env", "basename", "dirname", "realpath", "readlink", "sort", "uniq", "cut",
+        "tr", "jq", "yq", "diff", "tree", "md5", "shasum", "sha256sum"];
 
-# Notifications only matter in modes where the user is actually prompted.
-# - "default": user approves everything not in the allow list
-# - "acceptEdits": Edit/Write auto-approved, but Bash still prompts
-# Any other mode (bypassPermissions, dangerouslySkipPermissions, plan, etc.)
-# means no prompts → no point notifying.
-if [[ "$PERMISSION_MODE" != "default" ]] && [[ "$PERMISSION_MODE" != "acceptEdits" ]]; then
-    exit 0
-fi
+    # A rule such as "git status*" as an anchored regex: text matches literally,
+    # * matches any text (newlines included).
+    def rule_regex:
+        "\\A" + (gsub("(?<c>[.^$+?{}|()\\[\\]\\\\])"; "\\\(.c)") | gsub("\\*"; "[\\s\\S]*")) + "\\z";
 
-# In acceptEdits mode, only Bash commands can trigger prompts
-if [[ "$PERMISSION_MODE" == "acceptEdits" ]] && [[ "$TOOL_NAME" != "Bash" ]]; then
-    exit 0
-fi
+    # "Bash(git status*)" -> "git status*" for $tool, otherwise null.
+    def rule_argument($tool):
+        if startswith($tool + "(") and endswith(")") and length > ($tool | length) + 2
+        then .[($tool | length) + 1:-1] else null end;
 
-# Commands that are inherently safe (read-only / navigation)
-# These never need permission regardless of arguments, UNLESS they have
-# file write operators (>, >>) which are caught earlier in the flow.
-SAFE_COMMANDS="cd pwd ls echo cat head tail find grep rg fd ag fzf wc file stat du df which whereis whoami type test uname date hostname printenv env basename dirname realpath readlink sort uniq cut tr jq yq diff tree md5 shasum sha256sum"
+    def rule_matches($tool; $input):
+        rule_argument($tool) as $pattern
+        | $pattern != null and ($input | test($pattern | rule_regex));
 
-# Get allowed and denied lists from settings.json
-ALLOWED_LIST=$(jq -r '.permissions.allow[]' "$SETTINGS_FILE" 2>/dev/null)
-DENIED_LIST=$(jq -r '.permissions.deny[]' "$SETTINGS_FILE" 2>/dev/null)
+    # A > or >> redirect to a file. 2>&1, >&2 and >/dev/null do not count.
+    def writes_file:
+        gsub("[0-9]*>&[0-9]+"; "") | gsub("[0-9]*>/dev/null"; "") | test(">[\\s\\S]");
 
-# Check if command has file write operators
-# These ALWAYS require permission because they write to files
-has_write_operators() {
-    local cmd="$1"
-    # Remove safe redirects: 2>/dev/null, >/dev/null, 2>&1, >&2, etc.
-    local cleaned=$(echo "$cmd" | sed -E 's/[0-9]*>[>&][0-9]*//g; s/[0-9]*>\/dev\/null//g')
-    # Check for remaining: > >> (actual file redirects)
-    if [[ "$cleaned" =~ \>[^\>] ]] || [[ "$cleaned" =~ \>\> ]]; then
-        return 0
-    fi
-    return 1
-}
+    # The first word of each line, as `awk "{print $1}"` prints them.
+    def first_words:
+        [split("\n")[] | [splits("[ \t]+") | select(length > 0)] | .[0] // ""]
+        | join("\n") | sub("\n+\\z"; "");
 
-# Convert Claude Code pattern to regex
-# Rule: * matches anything (including spaces)
-pattern_to_regex() {
-    local pattern="$1"
-    # Escape special regex chars except *
-    local escaped=$(echo "$pattern" | sed 's/[.^$+?{}|()\\[\\]]/\\&/g')
-    # * matches anything
-    local regex=$(echo "$escaped" | sed 's/\*/.*/g')
-    echo "^${regex}$"
-}
+    def allowed($tool; $input; $allow; $deny):
+        if any($deny[]; rule_matches($tool; $input)) then false
+        elif $tool == "Bash" and ($input | writes_file) then false
+        # Compound commands (&&, ||, ;) skip the safe-command shortcut: each part needs checking.
+        elif $tool == "Bash" and ($input | test("&&|\\|\\||[^>];") | not)
+            and (($input | first_words) as $word | any(safe_commands[]; . == $word)) then true
+        else any($allow[]; . == $tool or rule_matches($tool; $input))
+        end;
 
-# Check if tool is denied
-is_denied() {
-    local tool="$1"
-    local input="$2"
+    ($settings[0].permissions // {}) as $permissions
+    | (.tool_name // "") as $tool
+    | (.tool_input.command // .tool_input // ""
+        | if type == "string" then . else tojson end | sub("\n+\\z"; "")) as $input
+    # permission_mode is optional since Claude Code ~2.1.50+, default to "default".
+    # Notifications only matter where the user is actually prompted: "default"
+    # asks for everything not allowed, "acceptEdits" still asks for Bash. Other
+    # modes (bypassPermissions, plan, ...) never prompt.
+    | (.permission_mode // "default") as $mode
+    | if $mode != "default" and $mode != "acceptEdits" then empty
+      elif $mode == "acceptEdits" and $tool != "Bash" then empty
+      elif allowed($tool; $input; $permissions.allow // []; $permissions.deny // []) then empty
+      elif $tool == "Bash" then "!" + $input[:50]
+      elif $tool == "Edit" or $tool == "Write" then "!\($tool): \(.tool_input.file_path // "")"
+      else "!" + $tool
+      end
+' 2>/dev/null)
 
-    while IFS= read -r pattern; do
-        [[ -z "$pattern" ]] && continue
+[[ -n "$OUTPUT" ]] || exit 0
 
-        if [[ "$pattern" =~ ^${tool}\((.+)\)$ ]]; then
-            local cmd_pattern="${BASH_REMATCH[1]}"
-            local regex=$(pattern_to_regex "$cmd_pattern")
-            if [[ "$input" =~ $regex ]]; then
-                return 0
-            fi
-        fi
-    done <<< "$DENIED_LIST"
-
-    return 1
-}
-
-# Check if tool is allowed
-is_allowed() {
-    local tool="$1"
-    local input="$2"
-
-    # First check if denied
-    if is_denied "$tool" "$input"; then
-        return 1
-    fi
-
-    # For Bash commands, check file write operators FIRST
-    # These always require permission because they write to files
-    if [[ "$tool" == "Bash" ]] && has_write_operators "$input"; then
-        return 1
-    fi
-
-    # Fast-path: inherently safe commands (cd, ls, find, etc.)
-    # Skip fast-path for compound commands (&&, ||, ;) — each part needs checking
-    if [[ "$tool" == "Bash" ]] && ! [[ "$input" =~ \&\&|\|\||[^\>]\; ]]; then
-        local first_word=$(echo "$input" | awk '{print $1}')
-        for safe in $SAFE_COMMANDS; do
-            if [[ "$first_word" == "$safe" ]]; then
-                return 0
-            fi
-        done
-    fi
-
-    while IFS= read -r pattern; do
-        [[ -z "$pattern" ]] && continue
-
-        # Direct tool match (e.g., "Read", "WebFetch")
-        if [[ "$pattern" == "$tool" ]]; then
-            return 0
-        fi
-
-        # Tool with pattern (e.g., "Bash(git status*)")
-        if [[ "$pattern" =~ ^${tool}\((.+)\)$ ]]; then
-            local cmd_pattern="${BASH_REMATCH[1]}"
-            local regex=$(pattern_to_regex "$cmd_pattern")
-            if [[ "$input" =~ $regex ]]; then
-                return 0
-            fi
-        fi
-    done <<< "$ALLOWED_LIST"
-
-    return 1
-}
-
-# Check if this tool+input is allowed
-if is_allowed "$TOOL_NAME" "$TOOL_INPUT"; then
-    exit 0
-fi
-
-# Not allowed - send notification
 # Pass terminal info for Warp tab name support
-TERMINAL="${TERM_PROGRAM:-}"
-
-if [[ "$TOOL_NAME" == "Bash" ]]; then
-    SHORT_INPUT=$(echo "$TOOL_INPUT" | head -c 50)
-    ~/.claude/notify.sh 'Claude Code - Permission Required' "$SHORT_INPUT" 'Glass' "$TERMINAL" &
-elif [[ "$TOOL_NAME" == "Edit" ]] || [[ "$TOOL_NAME" == "Write" ]]; then
-    FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // ""')
-    ~/.claude/notify.sh 'Claude Code - Permission Required' "$TOOL_NAME: $FILE_PATH" 'Glass' "$TERMINAL" &
-else
-    ~/.claude/notify.sh 'Claude Code - Permission Required' "$TOOL_NAME" 'Glass' "$TERMINAL" &
-fi
+~/.claude/notify.sh 'Claude Code - Permission Required' "${OUTPUT#!}" 'Glass' "${TERM_PROGRAM:-}" &
